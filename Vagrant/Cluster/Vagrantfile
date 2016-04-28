@@ -1,0 +1,150 @@
+$BoxName='CentOS_6'
+$IP_proxy="192.168.121.10"
+$IP_db1="192.168.121.11"
+$IP_db2="192.168.121.12"
+$IP_db3="192.168.121.13"
+$RootPass = "1q2w3e"
+$VMname="proxy"
+$VMname1="db1"
+$VMname2="db2"
+$VMname3="db3"
+$MariadbVersion="5.5"
+$ClusterName="DemoCluster"
+
+$ChefDBRecipe="mariadb_nexus"
+$chef_server_url = 'https://chef.training.local/organizations/omslearnigproject'
+$validation_key_path = '/home/bsv/chef/.chef/omslearnigproject-validator.pem'
+$validation_client_name = 'omslearnigproject-validator'
+$client_key_path = '/home/bsv/chef/.chef/bsv.pem'
+
+
+Vagrant.configure(2) do |config|
+#**********************************  DB1 *********************************
+ config.vm.define $VMname1 do |my_server|
+   my_server.vm.box=$BoxName
+   my_server.vm.hostname=$VMname1
+#   my_server.vm.provision "shell", inline: "ntpdate pool.ntp.org"
+   my_server.vm.provision "shell", run:"always", inline: "ifconfig eth0:0 "+$IP_db1+"/24"
+#   my_server.vm.network "private_network", ip: "192.168.50.4"
+   my_server.vm.provider :libvirt do |libvirt|
+    libvirt.memory = 2048
+    libvirt.cpus = 2
+    autostart = true
+   end
+
+   my_server.vm.provision "chef_client" do |chef|
+    chef.chef_server_url = $chef_server_url
+    chef.validation_key_path = $validation_key_path
+    chef.validation_client_name = $validation_client_name
+    chef.client_key_path = $client_key_path
+    chef.installer_download_path = "/home/vagrant/sync"
+    chef.version = "12.8.7"
+    chef.add_recipe $ChefDBRecipe
+    chef.json = {
+	  "new_root_password" => $RootPass,
+	  "forbid_remote_root" => false,
+          "mariadb_version" => $MariadbVersion,
+	  "cluster_enabled" => true, 
+	  "cluster_servers_ip" => $IP_db2+","+$IP_db3,
+	  "cluster_name" => $ClusterName,
+	  "cluster_node_ip" => $IP_db1,
+	  "cluster_is_master" => true,
+	  "cluster_user_pass" => "root:"+$RootPass
+    }
+   end
+ end
+#*********************************** DB2 ******************************
+ config.vm.define $VMname2 do |my_server|
+   my_server.vm.box=$BoxName
+   my_server.vm.hostname=$VMname2
+   my_server.vm.provision "shell", run:"always", inline: "ifconfig eth0:0 "+$IP_db2+"/24"
+   my_server.vm.provider :libvirt do |libvirt|
+    libvirt.memory = 2048
+    libvirt.cpus = 2
+    autostart = true
+   end
+
+   my_server.vm.provision "chef_client" do |chef|
+    chef.chef_server_url = $chef_server_url
+    chef.validation_key_path = $validation_key_path
+    chef.validation_client_name = $validation_client_name
+    chef.client_key_path = $client_key_path
+    chef.installer_download_path = "/home/vagrant/sync"
+    chef.version = "12.8.7"
+    chef.add_recipe $ChefDBRecipe
+    chef.json = {
+          "new_root_password" => $RootPass,
+          "forbid_remote_root" => false,
+	  "mariadb_version" => $MariadbVersion,
+          "cluster_enabled" => true,
+          "cluster_servers_ip" => $IP_db1+","+$IP_db3,
+          "cluster_name" => $ClusterName,
+          "cluster_node_ip" => $IP_db2,
+          "cluster_user_pass" => "root:"+$RootPass
+    }
+   end
+ end
+#******************************************  DB3 *********************************
+ config.vm.define $VMname3 do |my_server|
+   my_server.vm.box=$BoxName
+   my_server.vm.hostname=$VMname3
+   my_server.vm.provision "shell", run:"always", inline: "ifconfig eth0:0 "+$IP_db3+"/24"
+   my_server.vm.provider :libvirt do |libvirt|
+    libvirt.memory = 2048
+    libvirt.cpus = 2
+    autostart = true
+   end
+
+   my_server.vm.provision "chef_client" do |chef|
+    chef.chef_server_url = $chef_server_url
+    chef.validation_key_path = $validation_key_path
+    chef.validation_client_name = $validation_client_name
+    chef.client_key_path = $client_key_path
+    chef.installer_download_path = "/home/vagrant/sync"
+    chef.version = "12.8.7"
+    chef.add_recipe $ChefDBRecipe
+    chef.json = {
+          "new_root_password" => $RootPass,
+          "forbid_remote_root" => false,
+          "mariadb_version" => $MariadbVersion,
+          "cluster_enabled" => true,
+          "cluster_servers_ip" => $IP_db1+","+$IP_db2, 
+          "cluster_name" => $ClusterName,
+          "cluster_node_ip" => $IP_db3,
+          "cluster_user_pass" => "root:"+$RootPass
+    }
+   end
+ end
+
+#************HAProxy server *******************************************
+config.vm.define $VMname do |my_server|
+   my_server.vm.box=$BoxName
+   my_server.vm.hostname=$VMname
+   my_server.vm.provision "shell", run:"always", inline: "ifconfig eth0:0 "+$IP_proxy+"/24"
+#  my_server.vm.network :forwarded_port, guest: 3306, host: 3306, host_ip: "192.168.103.226"
+   my_server.vm.provider :libvirt do |libvirt|
+    libvirt.memory = 2048
+    libvirt.cpus = 2
+    autostart = true
+   end
+
+
+   my_server.vm.provision "chef_client" do |chef|
+    chef.chef_server_url = $chef_server_url
+    chef.validation_key_path = $validation_key_path
+    chef.validation_client_name = $validation_client_name
+    chef.client_key_path = $client_key_path
+    chef.installer_download_path = "/home/vagrant/sync"
+    chef.version = "12.8.7"
+    chef.add_recipe  "galera_proxy"
+    chef.json = {
+     'Server1_IP' => $IP_db1,
+     'Server2_IP' => $IP_db2,
+     'Server3_IP' => $IP_db3
+   }
+   end
+ end
+
+
+end
+
