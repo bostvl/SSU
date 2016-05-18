@@ -1,0 +1,137 @@
+heat_template_version: 2016-04-08
+
+description: Basic template of two servers, one network and one router
+
+parameters:
+  key_name:
+    type: string
+    description: Name of keypair to assign to servers for ssh authentication
+  public_net_id:
+    type: string
+    description: UUID of public network to outer world
+  private_net_name:
+    type: string
+    description: Name of private network 
+  private_subnet_name:
+    type: string
+    description: Name of private network subnet
+  private_subnet_cidr: 
+    type: string
+    description: Cidr of private network
+  private_subnet_allocation_pools:
+    type: json
+    description: Allocation pools of private network
+  private_subnet_gateway_ip:
+    type: string
+    description: Gateway of private network
+  private_subnet_dns_nameservers: 
+    type: comma_delimited_list
+    description: DNS server 
+  private_subnet_enable_dhcp: 
+    type: boolean
+    description: Enabling DHCP 
+  router_name:
+    type: string
+    description: Router name
+  public_net_id:
+    type: string
+    description: UUID of public network    
+  image_centos6:
+    type: string
+    description: UUID of glance image with centos 6
+  server_flavor:
+    type: string
+    description: UUID of flavors 
+  server_elk_master:
+    type: string
+    description: ELK server's name 
+  server_elk_slave01:
+    type: string
+    description: Elk slave's name
+
+resources:
+  
+  private_net:
+    type: OS::Neutron::Net
+    properties:
+      name: { get_param: private_net_name }
+  private_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      name: { get_param: private_subnet_name }
+      network_id: { get_resource: private_net }
+      allocation_pools: 
+        - { get_param: private_subnet_allocation_pools }
+      cidr: { get_param: private_subnet_cidr }
+      enable_dhcp: { get_param: private_subnet_enable_dhcp }
+      gateway_ip: { get_param: private_subnet_gateway_ip }
+      dns_nameservers: { get_param: private_subnet_dns_nameservers }
+
+  router:
+    type: OS::Neutron::Router
+    properties:
+      name: { get_param: router_name }
+      external_gateway_info: { "enable_snat": True, "network": { get_param: public_net_id }}
+
+  router_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: { get_resource: router }
+      subnet_id: { get_resource: private_subnet }
+
+
+
+  server_master:
+    type: OS::Nova::Server
+    properties:
+      name: { get_param: server_elk_master }
+      flavor: { get_param: server_flavor }
+      image: { get_param: image_centos6 }
+      key_name: { get_param: key_name }
+      networks:
+        - port: { get_resource: server_master_port }
+
+  server_master_port:
+    type: OS::Neutron::Port
+    properties:
+      network_id: { get_resource: private_net }
+      fixed_ips:
+        - subnet_id: { get_resource: private_subnet }
+
+  server_master_floating_ip:
+    type: OS::Neutron::FloatingIP
+    depends_on: router_interface
+    properties:
+      floating_network_id: { get_param: public_net_id }
+      port_id: { get_resource: server_master_port }
+
+
+  server_slave01:
+    type: OS::Nova::Server
+    properties:
+      name: { get_param: server_elk_slave01 }
+      flavor: { get_param: server_flavor }
+      image: { get_param: image_centos6 }
+      key_name: { get_param: key_name }
+      networks:
+        - port: { get_resource: server_slave01_port }
+
+  server_slave01_port:
+    type: OS::Neutron::Port
+    properties:
+      network_id: { get_resource: private_net }
+      fixed_ips:
+        - subnet_id: { get_resource: private_subnet }
+
+  server_slave01_floating_ip:
+    type: OS::Neutron::FloatingIP
+    depends_on: router_interface
+    properties:
+      floating_network_id: { get_param: public_net_id }
+      port_id: { get_resource: server_slave01_port }
+
+
+
+
+
+

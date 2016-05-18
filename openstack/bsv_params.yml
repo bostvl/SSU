@@ -1,0 +1,20 @@
+heat_template_version: 2016-05-16
+description: Simple template to deploy a single compute instance
+
+parameters:
+  key_name: bsv_key
+  public_net_id: 83e96c3c-d6a9-4334-8c52-2e52d2232be8  
+  router_name: bsv
+  private_net_name: private_bsv
+  private_subnet_name: private_bsv_subnet
+  private_subnet_cidr: 10.1.9.0/24
+  private_subnet_allocation_pools: {start: 10.1.9.10, end: 10.1.9.254}
+  private_subnet_gateway_ip: 10.1.9.1
+  private_subnet_dns_nameservers: [192.168.2.3]
+  private_subnet_enable_dhcp: True
+  server_elk_master: elk_master
+  server_elk_slave01: elk_slave01
+  image_centos6: CentOS-6-GenericCloud-1508
+  server_flavor: m1.small
+
+
